@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCP Tool Integrity & Trust Verification Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <!-- Header Bar -->
+  <header class="app-header">
+    <div class="header-left">
+      <div class="header-branding">
+        <h1>MCP Tool Integrity & Trust Gateway</h1>
+        <span class="branding-sub">Cryptographic File Pinning &bull; Runtime Security Proxy</span>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="system-status-indicator">[PROXY_ACTIVE]</div>
+      <div class="model-picker">
+        <label for="model-selector">ENGINE:</label>
+        <select id="model-selector">
+          <option value="qwen2.5-coder:7b-instruct-q4_K_M">qwen2.5-coder:7b</option>
+          <option value="llama3:latest">llama3:latest</option>
+          <option value="qwen2.5-coder:3b-instruct">qwen2.5-coder:3b</option>
+        </select>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Console Grid -->
+  <main class="console-layout">
+    
+    <!-- Left Panel: Tools Directory & Specs -->
+    <aside class="left-panel">
+      <div class="panel-box">
+        <div class="panel-box-header">
+          <h2>Registered MCP Tools</h2>
+          <button id="btn-open-register-modal" class="btn-sm btn-primary">+ Register Tool</button>
+        </div>
+        <p class="panel-box-desc">
+          Tools are pinned with a byte-level SHA-256 hash of their entire source file. Mismatches block execution prior to runtime.
+        </p>
+
+        <!-- Tools List -->
+        <div id="tools-inventory" class="tools-inventory">
+          <div style="font-size: 11px; font-family: var(--font-mono); color: var(--text-muted);">Loading tool manifests from disk...</div>
+        </div>
+      </div>
+
+      <!-- Quick Operations -->
+      <div class="panel-box">
+        <div class="panel-box-header">
+          <h2>Operational Prompts</h2>
+        </div>
+        <div class="prompts-list">
+          <button class="prompt-btn" data-query="Calculate sqrt(256) * 18 + 42 using the calculator tool.">
+            EXEC: calculator("sqrt(256) * 18 + 42")
+          </button>
+          <button class="prompt-btn" data-query="Search internal documentation for our security compliance policy.">
+            SEARCH: doc_search("security compliance")
+          </button>
+
+        </div>
+      </div>
+
+      <!-- Verification Rule -->
+      <div class="panel-box">
+        <div class="panel-box-header">
+          <h2>Verification Rule</h2>
+        </div>
+        <div class="info-callout">
+          <code>Match Condition:</code>
+          <p style="font-family: var(--font-mono); font-size: 11px; margin-top: 4px; color: var(--text-primary);">
+            SHA256(Disk_File_Bytes) == Pinned_Hash
+          </p>
+          <p style="font-size: 11px; color: var(--text-secondary); margin-top: 6px; line-height: 1.4;">
+            Targeted evaluation: Only the specific MCP tool invoked by the LLM is evaluated on disk.
+          </p>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Center: Agent Execution Console -->
+    <section class="center-panel">
+      <div class="chat-banner">
+        <div class="chat-banner-title">
+          <h3>Agent Execution Console</h3>
+          <span class="chat-banner-desc">All tool calls evaluated by real-time cryptographic file integrity</span>
+        </div>
+        <button id="btn-clear-chat" class="btn-sm btn-outline">Clear History</button>
+      </div>
+
+      <!-- Messages Stream -->
+      <div id="chat-stream" class="chat-stream">
+        <div class="chat-bubble bubble-assistant">
+          <div class="bubble-meta">SYSTEM &bull; PROXY INITIALIZED</div>
+          <div class="bubble-content">
+            Agent runtime connected to local Ollama daemon and MCP security proxy.
+            <br><br>
+            <strong>Integrity Baseline:</strong>
+            <ul style="margin-left: 18px; margin-top: 4px;">
+              <li>Targeted SHA-256 verification computed on tool invocation.</li>
+              <li>Execution halts on any single-byte or whitespace discrepancy.</li>
+              <li>Untrusted tool outputs sanitized before returning to agent context.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Input Bar -->
+      <div class="chat-input-bar">
+        <form id="chat-form">
+          <input 
+            type="text" 
+            id="chat-input" 
+            placeholder="Type query or tool execution instruction..." 
+            autocomplete="off"
+            required
+          />
+          <button type="submit" id="btn-submit" class="btn-submit">Execute</button>
+        </form>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Modal 1: Unified Diff & Re-approval Modal -->
+  <div id="diff-modal" class="modal-backdrop hidden">
+    <div class="modal-window">
+      <div class="modal-top">
+        <div class="modal-headline">
+          <span class="status-marker marker-alert">[TAMPER_DETECTED]</span>
+          <div>
+            <h3>File Mutation Detected</h3>
+            <p id="modal-tool-name-sub">Live file hash differs from approved cryptographic baseline.</p>
+          </div>
+        </div>
+        <button id="btn-close-diff-modal" class="modal-close-btn">&times;</button>
+      </div>
+
+      <div class="modal-content">
+        <div class="hash-matrix">
+          <div class="hash-matrix-card">
+            <div class="hash-matrix-label">Pinned Baseline Hash (Approved):</div>
+            <code id="diff-baseline-hash" class="hash-text hash-clean">-</code>
+          </div>
+          <div class="hash-matrix-card">
+            <div class="hash-matrix-label">Live File Hash on Disk (Modified):</div>
+            <code id="diff-live-hash" class="hash-text hash-altered">-</code>
+          </div>
+        </div>
+
+        <div class="diff-viewport">
+          <div class="diff-viewport-header">
+            <span>Unified Source Diff (Exact Lines & Whitespaces):</span>
+            <span id="diff-file-target" class="diff-target-path">tools/calculator.py</span>
+          </div>
+          <pre id="diff-pre-element" class="diff-code-pre"><code>Loading diff...</code></pre>
+        </div>
+      </div>
+
+      <div class="modal-bottom">
+        <div class="modal-note">
+          Inspect source changes. If this update is intentional, approve it to pin the new baseline hash. Otherwise, revert file to approved snapshot.
+        </div>
+        <div class="modal-actions">
+          <button id="btn-action-revert" class="btn-md btn-danger">Revert to Snapshot</button>
+          <button id="btn-action-approve" class="btn-md btn-success">Approve Update</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 2: Source Code Inspector & Live Editor -->
+  <div id="editor-modal" class="modal-backdrop hidden">
+    <div class="modal-window modal-window-large">
+      <div class="modal-top">
+        <div class="modal-headline">
+          <span class="status-marker">[SOURCE_INSPECTION]</span>
+          <div>
+            <h3 id="editor-modal-title">Inspect & Edit Tool Source</h3>
+            <p id="editor-modal-sub">Direct file editor on disk. Test modifications or whitespace edits.</p>
+          </div>
+        </div>
+        <button id="btn-close-editor-modal" class="modal-close-btn">&times;</button>
+      </div>
+
+      <div class="modal-content">
+        <div class="editor-status-bar">
+          <span>Target File: <code id="editor-file-path">tools/calculator.py</code></span>
+          <span id="editor-live-status-pill" class="badge badge-success">VERIFIED</span>
+        </div>
+        <div class="code-editor-wrap">
+          <textarea id="editor-textarea" spellcheck="false"></textarea>
+        </div>
+      </div>
+
+      <div class="modal-bottom">
+        <div class="modal-note">
+          Modifying and saving code will alter the live SHA-256 fingerprint on disk immediately.
+        </div>
+        <div class="modal-actions">
+          <button id="btn-editor-cancel" class="btn-md btn-outline">Cancel</button>
+          <button id="btn-editor-save" class="btn-md btn-primary">Save to Disk</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 3: Register New Tool Modal -->
+  <div id="register-modal" class="modal-backdrop hidden">
+    <div class="modal-window modal-window-large">
+      <div class="modal-top">
+        <div class="modal-headline">
+          <span class="status-marker">[REGISTRATION]</span>
+          <div>
+            <h3>Register New Python MCP Tool</h3>
+            <p>Pins the entire-file SHA-256 fingerprint upon creation.</p>
+          </div>
+        </div>
+        <button id="btn-close-register-modal" class="modal-close-btn">&times;</button>
+      </div>
+
+      <div class="modal-content">
+        <div class="form-group">
+          <label for="new-tool-name">TOOL NAME (IDENTIFIER):</label>
+          <input type="text" id="new-tool-name" placeholder="e.g. text_summarizer" required />
+        </div>
+        <div class="form-group">
+          <label for="new-tool-code">PYTHON SOURCE CODE (MUST DEFINE TOOL_DEFINITION AND EXECUTE):</label>
+          <textarea id="new-tool-code" class="code-input-area" spellcheck="false" placeholder='from tools.base import MCPToolDefinition&#10;&#10;TOOL_DEFINITION = MCPToolDefinition(&#10;    name="text_summarizer",&#10;    description="Summarizes text input.",&#10;    parameters={"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}&#10;)&#10;&#10;def execute(text: str):&#10;    return {"summary": text[:50] + "..."}'></textarea>
+        </div>
+      </div>
+
+      <div class="modal-bottom">
+        <div class="modal-note">
+          The file will be written to disk, cryptographically hashed, and pinned in the registry.
+        </div>
+        <div class="modal-actions">
+          <button id="btn-register-cancel" class="btn-md btn-outline">Cancel</button>
+          <button id="btn-register-submit" class="btn-md btn-success">Pin & Register Tool</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 4: Tool Execution Telemetry & Security Proof Modal -->
+  <div id="telemetry-modal" class="modal-backdrop hidden">
+    <div class="modal-window">
+      <div class="modal-top">
+        <div class="modal-headline">
+          <span id="telemetry-modal-status-badge" class="status-marker">[AUTHENTICATED]</span>
+          <div>
+            <h3 id="telemetry-modal-title">Tool Execution Telemetry</h3>
+            <p id="telemetry-modal-sub">Cryptographic integrity proof and execution I/O payload.</p>
+          </div>
+        </div>
+        <button id="btn-close-telemetry-modal" class="modal-close-btn">&times;</button>
+      </div>
+
+      <div class="modal-content">
+        <div class="hash-matrix">
+          <div class="hash-matrix-card">
+            <div class="hash-matrix-label">Invoked Tool Identifier:</div>
+            <code id="telemetry-modal-tool-name" class="hash-text hash-clean">-</code>
+          </div>
+          <div class="hash-matrix-card">
+            <div class="hash-matrix-label">Execution Latency:</div>
+            <code id="telemetry-modal-latency" class="hash-text">-</code>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>INVOCATION ARGUMENTS (INPUT PAYLOAD):</label>
+          <pre id="telemetry-modal-arguments" class="telemetry-modal-code"></pre>
+        </div>
+
+        <div class="form-group">
+          <label>VERIFIED TOOL OUTPUT (SANITIZED DATA):</label>
+          <pre id="telemetry-modal-output" class="telemetry-modal-code"></pre>
+        </div>
+
+        <div class="info-callout">
+          <code>Security Verification Proof:</code>
+          <p id="telemetry-modal-proof" style="font-family: var(--font-mono); font-size: 11px; margin-top: 4px; color: var(--text-secondary);">
+            Targeted byte-level SHA-256 hash verified against pinned baseline on disk prior to runtime execution.
+          </p>
+        </div>
+      </div>
+
+      <div class="modal-bottom">
+        <div class="modal-note">
+          Runtime security proxy verified zero code tampering and sanitized output payload before returning to agent context.
+        </div>
+        <div class="modal-actions">
+          <button id="btn-close-telemetry-modal-bottom" class="btn-md btn-outline">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 5: Cryptographic Hash Fingerprint Modal -->
+  <div id="hash-modal" class="modal-backdrop hidden">
+    <div class="modal-window">
+      <div class="modal-top">
+        <div class="modal-headline">
+          <span id="hash-modal-status-badge" class="status-marker">[VERIFIED]</span>
+          <div>
+            <h3 id="hash-modal-title">Tool Cryptographic Fingerprint</h3>
+            <p id="hash-modal-sub">Exact byte-level SHA-256 integrity baseline vs disk file.</p>
+          </div>
+        </div>
+        <button id="btn-close-hash-modal" class="modal-close-btn">&times;</button>
+      </div>
+
+      <div class="modal-content">
+        <div class="form-group">
+          <label>SOURCE FILE PATH ON DISK:</label>
+          <input type="text" id="hash-modal-file-path" readonly style="font-family: var(--font-mono);" />
+        </div>
+
+        <div class="hash-matrix" style="grid-template-columns: 1fr;">
+          <div class="hash-matrix-card">
+            <div class="hash-matrix-label">Pinned Baseline SHA-256 (Approved Baseline):</div>
+            <code id="hash-modal-baseline-val" class="hash-text hash-clean">-</code>
+          </div>
+          <div class="hash-matrix-card">
+            <div class="hash-matrix-label">Live SHA-256 Fingerprint (Current Disk Bytes):</div>
+            <code id="hash-modal-live-val" class="hash-text hash-clean">-</code>
+          </div>
+        </div>
+
+        <div class="info-callout">
+          <code>Integrity Status:</code>
+          <p id="hash-modal-status-desc" style="font-family: var(--font-mono); font-size: 11px; margin-top: 4px; color: var(--text-primary);">
+            Baseline hash matches disk bytes identically. Tool is approved for runtime execution.
+          </p>
+        </div>
+      </div>
+
+      <div class="modal-bottom">
+        <div class="modal-note">
+          Any single byte or whitespace mutation will cause immediate mismatch and halt execution.
+        </div>
+        <div class="modal-actions">
+          <button id="btn-hash-modal-edit" class="btn-md btn-primary">Inspect / Edit Source</button>
+          <button id="btn-close-hash-modal-bottom" class="btn-md btn-outline">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
